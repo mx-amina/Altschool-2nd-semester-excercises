@@ -1,0 +1,198 @@
+---
+- hosts: all
+  become: true
+  vars_files:
+    - vars/default.yml
+
+  tasks:
+
+    - name: "update apt packages"
+      become: true
+      become_method: sudo
+      apt:
+        update_cache: yes
+
+    - name: set hostname
+      command: |
+        sudo hostnamectl set-hostname {{ http_host }}
+  
+    - name: set timezone
+      command: |
+        sudo timedatectl set-timezone Africa/Lagos
+
+    - name: Install prerequisites
+      apt: name={{ item }} update_cache=yes state=latest force_apt_get=yes
+      loop: [ 'aptitude' ]
+
+  #Apache Configuration
+    - name: Install LAMP Packages
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'apache2', 'mysql-server', 'python3-pymysql', 'php', 'php-mysql', 'libapache2-mod-php' ]
+
+    - name: Create document root
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: '0755'
+
+    - name: install composer with dependencies
+      command: |
+        php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+        php -r "if (hash_file('sha384', 'composer-setup.php') === '55ce33d7678c5a611085589f1f3ddf8b3c52d662cd01d4ba75c0ee0459970c2200a51f492d557530c71c15d8dba01eae') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+        php composer-setup.php
+        php -r "unlink('composer-setup.php');"
+
+    - name: move composer.phar
+      become: true
+      become_method: sudo
+      command: |
+        mv composer.phar /usr/local/bin/composer
+
+    - name: clone the repo
+      become: true
+      become_method: sudo
+      command: | 
+        cd /var/www
+        git clone https://github.com/f1amy/laravel-realworld-example-app.git
+
+   - name: Clone a github repository
+     git:
+       repo: https://github.com/f1amy/laravel-realworld-example-app.git
+       dest: /var/www/
+       clone: yes
+       update: yes
+
+    - name: rename the repo
+      become: true
+      become_method: sudo
+      command: | 
+        cd /var/www/
+        mv laravel-realworld-example-app {{ http_host }}
+
+    - name: setting permission for the repo
+      become: true
+      become_method: sudo
+      command: | 
+        cd /var/www/
+        chown -R www-data:www-data /var/www/{{ http_host }}
+        chown -R 775 /var/www/{{ http_host }}
+
+    - name: setting permission for files in the repo
+      become: true
+      become_method: sudo
+      command: | 
+        cd /var/www/{{ http_host }}
+        chown -R 755 /var/www/{{ http_host }}storage
+        sudo chgrp -R www-data storage bootstrap/cache
+        sudo chmod -R ug-rwx storage bootstrap/cache
+
+    - name: copy .env
+      become: true
+      become_method: sudo
+      command: | 
+        cd /var/www/{{ http_host }}
+        cp .env.example .env
+
+    - name: edit php.ini file
+      command: |
+        cd /etc/php/7.4/apache2
+        echo cgi.fix_pathinfo=0 >> php.ini
+
+    - name: edit php.ini file
+      lineinfile: dest=/var/www/{{ http_host }}/php.ini regexp='^;cgi.fix_pathinfo=' line=cgi.fix_pathinfo=0
+
+    - name: set APP_NAME
+      lineinfile: dest=/etc/php/7.4/apache2/.env regexp='^APP_NAME=' line=APP_NAME=altschoolproject
+
+    - name: set DB_HOST
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_HOST=' line=DB_HOST=mysql
+
+    - name: set DB_CONNECTION
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_CONNECTION=' line=DB_CONNECTION=mysql
+
+    - name: set DB_DATABASE
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_DATABASE=' line=DB_DATABASE=altschoolproject
+
+    - name: set DB_USERNAME
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_USERNAME=' line=DB_USERNAME=bashir
+
+    - name: set DB_PORT
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_PORT=' line=DB_PORT=3306
+
+    - name: set DB_PASSWORD
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_PASSWORD=' line=DB_PASSWORD={{ mysql_root_password }}
+
+    - name: generate app key
+      command: php  /var/www/{{ http_host }}/artisan key:generate
+
+    - name: set up app storage link
+      command: php  /var/www/{{ http_host }}/artisan storage:link
+
+    - name: set up app storage link
+      command: php  /var/www/{{ http_host }}/artisan migrate --seed
+
+    - name: create a new laravel app using composer
+      command: |
+        cd /var/www/{{ http_host }}
+        composer create-project
+
+    - name: Set up Apache virtualhost
+      template:
+        src: "files/apache.conf.j2"
+        dest: "/etc/apache2/sites-available/{{ http_conf }}"
+      notify: Reload Apache
+
+    - name: Enable new site
+      shell: /usr/sbin/a2ensite {{ http_conf }}
+      notify: Reload Apache
+
+    - name: Disable default Apache site
+      shell: /usr/sbin/a2dissite 000-default.conf
+      when: disable_default
+      notify: Reload Apache
+
+  # MySQL Configuration
+    - name: Sets the root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Removes all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Removes the MySQL test database
+      mysql_db:
+        name: test
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+  # UFW Configuration
+    - name: "UFW - Allow HTTP on port {{ http_port }}"
+      ufw:
+        rule: allow
+        port: "{{ http_port }}"
+        proto: tcp
+
+    - name: run SSL encryption
+      command: | 
+        sudo apt install python3-certbot-apache
+        sudo certbot --apache --agree-tos --redirect -m get2bash@gmail.com -d altschoolproject.live -d www.altschoolproject.live
+
+  handlers:
+    - name: Reload Apache
+      service:
+        name: apache2
+        state: reloaded
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted

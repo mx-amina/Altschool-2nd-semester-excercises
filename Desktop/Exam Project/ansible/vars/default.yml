@@ -1,0 +1,8 @@
+---
+
+mysql_root_password: "mysql_root_password"
+app_user: "bashir"
+http_host: "altschoolproject"
+http_conf: "altschoolproject.conf"
+http_port: "80"
+disable_default: true
