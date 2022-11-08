@@ -103,7 +103,7 @@
       lineinfile: dest=/var/www/{{ http_host }}/php.ini regexp='^;cgi.fix_pathinfo=' line=cgi.fix_pathinfo=0
 
     - name: set APP_NAME
-      lineinfile: dest=/etc/php/7.4/apache2/.env regexp='^APP_NAME=' line=APP_NAME=altschoolproject
+      lineinfile: dest=/etc/php/7.4/apache2/.env regexp='^APP_NAME=' line=APP_NAME=Exam-project
 
     - name: set DB_HOST
       lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_HOST=' line=DB_HOST=mysql
@@ -112,10 +112,10 @@
       lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_CONNECTION=' line=DB_CONNECTION=mysql
 
     - name: set DB_DATABASE
-      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_DATABASE=' line=DB_DATABASE=altschoolproject
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_DATABASE=' line=DB_DATABASE=Exam-project
 
     - name: set DB_USERNAME
-      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_USERNAME=' line=DB_USERNAME=bashir
+      lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_USERNAME=' line=DB_USERNAME=Amina
 
     - name: set DB_PORT
       lineinfile: dest=/var/www/{{ http_host }}/.env regexp='^DB_PORT=' line=DB_PORT=3306
@@ -184,7 +184,7 @@
     - name: run SSL encryption
       command: | 
         sudo apt install python3-certbot-apache
-        sudo certbot --apache --agree-tos --redirect -m get2bash@gmail.com -d altschoolproject.live -d www.altschoolproject.live
+        sudo certbot --apache --agree-tos --redirect -m emailaminauzoamaka@gmail.com-d iseeshege.me -d www.iseeshege.me
 
   handlers:
     - name: Reload Apache
